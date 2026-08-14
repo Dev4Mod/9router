@@ -50,6 +50,9 @@ export function geminiToOpenAIResponse(chunk, state) {
     state.model = response.modelVersion || "gemini";
     state.functionIndex = 0;
     state.geminiToolCallCount = 0;
+    state.hasContentText = false;
+    state.hasReasoningText = false;
+    state.accumulatedReasoning = "";
     results.push(buildChunk(chunkMeta(state), { role: ROLE.ASSISTANT }, null));
   }
 
@@ -65,6 +68,12 @@ export function geminiToOpenAIResponse(chunk, state) {
         const hasFunctionCall = !!part.functionCall;
         
         if (hasTextContent) {
+          if (isThought) {
+            state.hasReasoningText = true;
+            state.accumulatedReasoning += part.text;
+          } else {
+            state.hasContentText = true;
+          }
           results.push(buildChunk(
             chunkMeta(state),
             isThought ? reasoningDelta(part.text) : { content: part.text },
@@ -83,6 +92,12 @@ export function geminiToOpenAIResponse(chunk, state) {
       // can also stream thought parts without a signature; those must not be
       // surfaced as normal assistant content in OpenAI-compatible clients.
       if (part.text !== undefined && part.text !== "") {
+        if (isThought) {
+          state.hasReasoningText = true;
+          state.accumulatedReasoning += part.text;
+        } else {
+          state.hasContentText = true;
+        }
         results.push(buildChunk(
           chunkMeta(state),
           isThought ? reasoningDelta(part.text) : { content: part.text },
@@ -125,6 +140,13 @@ export function geminiToOpenAIResponse(chunk, state) {
       finishReason = OPENAI_FINISH.TOOL_CALLS;
     }
     
+    // Safeguard: If model finished after reasoning but emitted NO text content and NO tool calls,
+    // emit the accumulated reasoning text as content so clients don't receive an empty assistant message.
+    if (!state.hasContentText && state.geminiToolCallCount === 0 && state.hasReasoningText && state.accumulatedReasoning) {
+      results.push(buildChunk(chunkMeta(state), { content: state.accumulatedReasoning }, null));
+      state.hasContentText = true;
+    }
+
     const finalChunk = buildChunk(chunkMeta(state), {}, finishReason);
     
     // Include usage in final chunk for downstream translators

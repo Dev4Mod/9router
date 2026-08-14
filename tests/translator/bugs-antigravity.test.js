@@ -75,6 +75,33 @@ describe("OpenAI → Antigravity", () => {
     const nonThoughtParts = modelTurn.parts.filter(p => !p.thought);
     expect(nonThoughtParts.length, "model turn must have non-thought parts").toBeGreaterThan(0);
   });
+
+  it("geminiToOpenAIResponse emits fallback content when model finishes with only reasoning parts", () => {
+    const state = initState(FORMATS.OPENAI);
+    const events1 = translateResponse(FORMATS.ANTIGRAVITY, FORMATS.OPENAI, {
+      response: {
+        candidates: [{
+          content: {
+            role: "model",
+            parts: [{ thought: true, text: "thinking hard" }],
+          },
+        }],
+      },
+    }, state);
+
+    const events2 = translateResponse(FORMATS.ANTIGRAVITY, FORMATS.OPENAI, {
+      response: {
+        candidates: [{
+          finishReason: "STOP",
+        }],
+      },
+    }, state);
+
+    const allEvents = [...(events1 || []), ...(events2 || [])];
+    const contentChunk = allEvents.find(e => e.choices?.[0]?.delta?.content);
+    expect(contentChunk, "fallback content chunk emitted").toBeDefined();
+    expect(contentChunk.choices[0].delta.content).toBe("thinking hard");
+  });
 });
 
 describe("Antigravity → Claude", () => {
