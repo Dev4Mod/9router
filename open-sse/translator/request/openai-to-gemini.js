@@ -37,10 +37,12 @@ function sanitizeGeminiFunctionName(name) {
 function normalizeGeminiContents(contents) {
   const out = [];
   for (const c of contents || []) {
-    if (!c?.role || !Array.isArray(c.parts) || c.parts.length === 0) continue;
+    if (!c?.role || !Array.isArray(c.parts)) continue;
+    const validParts = c.parts.filter(p => !(p.text !== undefined && p.text === "" && !p.thought));
+    if (validParts.length === 0) continue;
     const last = out.at(-1);
-    if (last?.role === c.role) last.parts.push(...c.parts);
-    else out.push({ ...c, parts: [...c.parts] });
+    if (last?.role === c.role) last.parts.push(...validParts);
+    else out.push({ ...c, parts: [...validParts] });
   }
   return out;
 }
@@ -111,27 +113,28 @@ function openaiToGeminiBase(model, body, stream, signature = DEFAULT_THINKING_AG
         }
       } else if (role === ROLE.ASSISTANT) {
         const parts = [];
+        const hasReasoning = Boolean(msg.reasoning_content);
 
-        // Thinking/reasoning → thought part with signature
-        if (msg.reasoning_content) {
+        // Thinking/reasoning → thought part
+        if (hasReasoning) {
           parts.push({
             thought: true,
             text: msg.reasoning_content
-          });
-          parts.push({
-            thoughtSignature: signature,
-            text: ""
           });
         }
 
         if (content) {
           const text = typeof content === "string" ? content : extractTextContent(content);
           if (text) {
-            parts.push({ text });
+            const textPart = { text };
+            if (hasReasoning) {
+              textPart.thoughtSignature = signature;
+            }
+            parts.push(textPart);
           }
         }
 
-        if (msg.tool_calls && Array.isArray(msg.tool_calls)) {
+        if (msg.tool_calls && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
           const toolCallIds = [];
           for (const tc of msg.tool_calls) {
             if (tc.type !== OPENAI_BLOCK.FUNCTION) continue;
@@ -190,8 +193,19 @@ function openaiToGeminiBase(model, body, stream, signature = DEFAULT_THINKING_AG
               result.contents.push({ role: GEMINI_ROLE.USER, parts: toolParts });
             }
           }
-        } else if (parts.length > 0) {
-          result.contents.push({ role: GEMINI_ROLE.MODEL, parts });
+        } else {
+          // If assistant message has reasoning but no content text and no tool calls, add a text part
+          // so Gemini API receives a valid non-thought text part rather than empty parts or thought-only parts
+          if (hasReasoning && parts.every(p => p.thought)) {
+            parts.push({
+              thoughtSignature: signature,
+              text: msg.reasoning_content || " "
+            });
+          }
+
+          if (parts.length > 0) {
+            result.contents.push({ role: GEMINI_ROLE.MODEL, parts });
+          }
         }
       }
     }

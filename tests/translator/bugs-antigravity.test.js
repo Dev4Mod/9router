@@ -55,6 +55,28 @@ describe("Antigravity → OpenAI", () => {
   });
 });
 
+describe("OpenAI → Antigravity", () => {
+  it("assistant with reasoning_content and no text does not produce empty text parts", () => {
+    const out = openaiToAntigravityRequest("gemini-3.6-flash-high", {
+      messages: [
+        { role: "user", content: "hello" },
+        { role: "assistant", reasoning_content: "thinking about something" },
+        { role: "user", content: "continue" }
+      ]
+    }, true, { projectId: "project-1" });
+
+    const contents = out.request.contents;
+    const modelTurn = contents.find(c => c.role === "model");
+    expect(modelTurn).toBeDefined();
+
+    const hasEmptyText = modelTurn.parts.some(p => p.text === "");
+    expect(hasEmptyText, "empty text part in Gemini model turn").toBe(false);
+
+    const nonThoughtParts = modelTurn.parts.filter(p => !p.thought);
+    expect(nonThoughtParts.length, "model turn must have non-thought parts").toBeGreaterThan(0);
+  });
+});
+
 describe("Antigravity → Claude", () => {
   it("tool call input_json_delta includes Anthropic index", () => {
     const state = initState(FORMATS.CLAUDE);
