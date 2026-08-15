@@ -200,7 +200,17 @@ export class AntigravityExecutor extends BaseExecutor {
         if (p.thought && !p.functionCall) return false;
         if (p.thoughtSignature && !p.functionCall && !p.text) return false;
         return true;
-      });
+      }) || [];
+
+      // If filtering emptied the parts, keep the thought text as regular text or whitespace so the turn is never empty
+      if (parts.length === 0 && c.parts?.length > 0) {
+        const firstWithText = c.parts.find(p => p.text);
+        if (firstWithText) {
+          parts.push({ text: firstWithText.text });
+        } else {
+          parts.push({ text: " " });
+        }
+      }
       // Gemini 3+ rejects functionCall parts without thoughtSignature. Clients (Claude Code, IDE)
       // don't persist thoughtSignature in their history, so backfill the default signature on any
       // functionCall part that arrives without one.

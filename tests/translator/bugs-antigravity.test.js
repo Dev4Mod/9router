@@ -123,6 +123,24 @@ describe("OpenAI → Antigravity", () => {
     expect(contentChunk, "fallback content chunk emitted").toBeDefined();
     expect(contentChunk.choices[0].delta.content).toBe("thinking hard");
   });
+
+  it("AntigravityExecutor transformRequest preserves content when turn has thought-only parts", () => {
+    const executor = new AntigravityExecutor();
+    const transformed = executor.transformRequest("gemini-3.6-flash-high", {
+      request: {
+        contents: [
+          { role: "user", parts: [{ text: "hi" }] },
+          { role: "model", parts: [{ thought: true, text: "only thinking here" }] },
+          { role: "user", parts: [{ text: "next" }] },
+        ]
+      }
+    }, true, { projectId: "project-1" });
+
+    const modelTurn = (transformed.request?.contents || transformed.contents).find(c => c.role === "model");
+    expect(modelTurn).toBeDefined();
+    expect(modelTurn.parts.length).toBeGreaterThan(0);
+    expect(modelTurn.parts[0].text).toBe("only thinking here");
+  });
 });
 
 describe("Antigravity → Claude", () => {
