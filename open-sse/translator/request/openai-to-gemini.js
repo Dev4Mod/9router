@@ -203,9 +203,13 @@ function openaiToGeminiBase(model, body, stream, signature = DEFAULT_THINKING_AG
             });
           }
 
-          if (parts.length > 0) {
-            result.contents.push({ role: GEMINI_ROLE.MODEL, parts });
+          // If assistant message is completely empty, provide a non-empty text part so the model turn exists
+          // and prevents adjacent user turns (like functionResponse and user text) from merging invalidly.
+          if (parts.length === 0) {
+            parts.push({ text: " " });
           }
+
+          result.contents.push({ role: GEMINI_ROLE.MODEL, parts });
         }
       }
     }

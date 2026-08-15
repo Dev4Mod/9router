@@ -76,6 +76,27 @@ describe("OpenAI → Antigravity", () => {
     expect(nonThoughtParts.length, "model turn must have non-thought parts").toBeGreaterThan(0);
   });
 
+  it("empty assistant message in history retains model turn to prevent merging toolResponse with prompt text", () => {
+    const out = openaiToAntigravityRequest("gemini-3.6-flash-high", {
+      messages: [
+        { role: "user", content: "do something" },
+        { role: "assistant", tool_calls: [{ id: "grep-1", type: "function", function: { name: "grep", arguments: "{}" } }] },
+        { role: "tool", tool_call_id: "grep-1", content: "results..." },
+        { role: "assistant", content: "" },
+        { role: "user", content: "continue" }
+      ]
+    }, true, { projectId: "project-1" });
+
+    const contents = out.request.contents;
+    // Check that functionResponse and user prompt text are NOT merged in the same turn
+    const combinedUserTurn = contents.find(c =>
+      c.role === "user" &&
+      c.parts.some(p => p.functionResponse) &&
+      c.parts.some(p => p.text)
+    );
+    expect(combinedUserTurn, "user turn must not merge functionResponse with prompt text").toBeUndefined();
+  });
+
   it("geminiToOpenAIResponse emits fallback content when model finishes with only reasoning parts", () => {
     const state = initState(FORMATS.OPENAI);
     const events1 = translateResponse(FORMATS.ANTIGRAVITY, FORMATS.OPENAI, {

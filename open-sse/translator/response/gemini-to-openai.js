@@ -145,6 +145,9 @@ export function geminiToOpenAIResponse(chunk, state) {
     if (!state.hasContentText && state.geminiToolCallCount === 0 && state.hasReasoningText && state.accumulatedReasoning) {
       results.push(buildChunk(chunkMeta(state), { content: state.accumulatedReasoning }, null));
       state.hasContentText = true;
+    } else if (!state.hasContentText && state.geminiToolCallCount === 0 && !state.hasReasoningText) {
+      results.push(buildChunk(chunkMeta(state), { content: " " }, null));
+      state.hasContentText = true;
     }
 
     const finalChunk = buildChunk(chunkMeta(state), {}, finishReason);
